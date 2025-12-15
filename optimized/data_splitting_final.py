@@ -21,7 +21,7 @@ FINAL_FEATURE_SET = [
     # 新增的 MACD 和 RSI 因子
     'MACD_HIST', 'MACD_DEA', 'MACD_DIF', 'RSI' 
 ]
-FINAL_COLUMNS = FINAL_FEATURE_SET + ['Target'] 
+FINAL_COLUMNS = FINAL_FEATURE_SET + ['Target', 'Close']
 
 # 输出文件名
 TRAIN_FILE_NAME = "00700_train_data_final.csv"
