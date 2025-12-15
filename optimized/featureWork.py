@@ -182,26 +182,16 @@ def feature_engineering(df):
 
     # 定义特征和标签列
     EXCLUDED_COLS = [
-        'Future_Close',
-        'Future_Return',
-        'Next_Day_Close',
-        'Next_Day_Return',
-        'Target',
-        'TR',
-        'High_PrevClose',
-        'Low_PrevClose',
-        'Body_Length',
-        'Upper_Wick',
-        'Volume_SMA_5',
-        'StdDev'
-    ]
-
-    EXCLUDED_COLS = [
         'Next_Day_Close', 'Next_Day_Return',
-        'Future_Close', 'Future_Return',   # ← 新增
-        'Target', 'TR', 'High_PrevClose', 'Low_PrevClose',
-        'Body_Length', 'Upper_Wick', 'Volume_SMA_5', 'StdDev'
+        'Future_Close', 'Future_Return',   # ←【只新增这两个】
+        'Target',
+        'TR', 'High_PrevClose', 'Low_PrevClose',
+        'Body_Length', 'Upper_Wick',
+        'Volume_SMA_5', 'StdDev'
     ]
+    # ===== 新增：显式定义特征列与标签列（修复 NameError）=====
+    LABEL_COLUMN = 'Target'
+    FEATURE_COLUMNS = [col for col in df.columns if col not in EXCLUDED_COLS]
 
     X = df[FEATURE_COLUMNS]
     Y = df[LABEL_COLUMN]

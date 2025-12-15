@@ -13,6 +13,8 @@ CLASSIFICATION_THRESHOLD = 0.005  # 涨跌阈值 delta = 0.5%
 TRAIN_END_DATE = '2023-12-31'
 INVEST_START_DATE = '2024-01-01'
 INVEST_END_DATE = '2025-04-24' 
+# ===== 新增：训练集内部切分（仅用于调参）=====
+PRETRAIN_RATIO = 0.7   # 前 70% 用于训练
 
 # 🚀 优化方向一：更新为 Top 9 因子
 FINAL_FEATURE_SET = [
@@ -122,6 +124,20 @@ if __name__ == "__main__":
         # 严格按时间点分割数据集
         df_train = df_final.loc[df_final.index <= TRAIN_END_DATE].copy()
         df_predicting = df_final.loc[(df_final.index >= INVEST_START_DATE) & (df_final.index <= INVEST_END_DATE)].copy()
+        # ==================================================
+        # 新增：训练集内部再切 Pretrain / Valid（仅用于调参）
+        # 不影响原 Train / Predict 逻辑
+        # ==================================================
+        split_idx = int(len(df_train) * PRETRAIN_RATIO)
+
+        df_pretrain = df_train.iloc[:split_idx].copy()
+        df_valid    = df_train.iloc[split_idx:].copy()
+
+        print("-" * 50)
+        print("📊 训练集内部切分完成：")
+        print(f"Pretrain: {df_pretrain.index.min()} ~ {df_pretrain.index.max()} ({len(df_pretrain)})")
+        print(f"Valid   : {df_valid.index.min()} ~ {df_valid.index.max()} ({len(df_valid)})")
+        print("-" * 50)
 
         # 确保预测集包含原始 Close 价格，以便回测
         df_predicting_output = df_with_features.loc[df_predicting.index, FINAL_COLUMNS + ['Close']].copy()
@@ -130,6 +146,9 @@ if __name__ == "__main__":
         df_train.to_csv(TRAIN_FILE_NAME, encoding='utf-8')
         df_predicting_output.to_csv(PREDICTING_FILE_NAME, encoding='utf-8')
         
+        df_pretrain.to_csv("00700_pretrain_data.csv", encoding='utf-8')
+        df_valid.to_csv("00700_valid_data.csv", encoding='utf-8')
+
         print("-" * 50)
         print("✅ 数据分割完成，现在包含 Top 9 因子！")
         print(f"💾 训练集 ('{TRAIN_FILE_NAME}') 大小: {len(df_train)} 样本。")
