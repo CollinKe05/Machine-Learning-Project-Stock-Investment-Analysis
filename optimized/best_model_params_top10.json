@@ -1,0 +1,163 @@
+{
+  "best_valid_return": 0.12168200000000085,
+  "test_return": 0.5712179999999976,
+  "r2_score": 0.9062580199553475,
+  "rmse": 20.82707685484594,
+  "best_params": {
+    "组合": 8,
+    "描述": "小型低学习率",
+    "units": [
+      64,
+      32
+    ],
+    "dropout": 0.2,
+    "learning_rate": 0.0005,
+    "valid_return": 0.12168200000000085,
+    "r2_score": 0.7684244322590816,
+    "rmse": 8.208608890919136
+  },
+  "data_split": {
+    "pre_train_end": "2023-06-30",
+    "valid_start": "2023-07-01",
+    "valid_end": "2023-12-31",
+    "test_start": "2024-01-01"
+  },
+  "random_seed": 42,
+  "feature_cols": [
+    "Open",
+    "High",
+    "Low",
+    "Close",
+    "Volume",
+    "MA5",
+    "MA20",
+    "DIF",
+    "DEA",
+    "MACD_Hist"
+  ],
+  "lookback": 15,
+  "epochs": 60,
+  "batch_size": 16,
+  "all_results": [
+    {
+      "组合": 1,
+      "描述": "标准中型网络",
+      "units1": 128,
+      "units2": 64,
+      "dropout": 0.2,
+      "learning_rate": 0.001,
+      "valid_return": -0.0622,
+      "r2_score": 0.7355219451862816,
+      "rmse": 8.772391713533617,
+      "epochs_trained": 49
+    },
+    {
+      "组合": 2,
+      "描述": "小型保守网络",
+      "units1": 64,
+      "units2": 32,
+      "dropout": 0.3,
+      "learning_rate": 0.001,
+      "valid_return": -0.10798799999999989,
+      "r2_score": 0.6237906024495734,
+      "rmse": 10.462561283864886,
+      "epochs_trained": 37
+    },
+    {
+      "组合": 3,
+      "描述": "大型网络低学习率",
+      "units1": 256,
+      "units2": 128,
+      "dropout": 0.2,
+      "learning_rate": 0.0005,
+      "valid_return": 0.0751020000000004,
+      "r2_score": 0.8043010562676652,
+      "rmse": 7.546011031209462,
+      "epochs_trained": 60
+    },
+    {
+      "组合": 4,
+      "描述": "对称网络",
+      "units1": 128,
+      "units2": 128,
+      "dropout": 0.3,
+      "learning_rate": 0.001,
+      "valid_return": 0.026090000000000436,
+      "r2_score": 0.8097256565217706,
+      "rmse": 7.440691713604741,
+      "epochs_trained": 41
+    },
+    {
+      "组合": 5,
+      "描述": "紧凑高Dropout",
+      "units1": 64,
+      "units2": 64,
+      "dropout": 0.4,
+      "learning_rate": 0.001,
+      "valid_return": -0.01271,
+      "r2_score": 0.6655542604724446,
+      "rmse": 9.864748759366558,
+      "epochs_trained": 53
+    },
+    {
+      "组合": 6,
+      "描述": "中型保守",
+      "units1": 128,
+      "units2": 64,
+      "dropout": 0.3,
+      "learning_rate": 0.0005,
+      "valid_return": 0.03615800000000061,
+      "r2_score": 0.7771656518592671,
+      "rmse": 8.052194603966413,
+      "epochs_trained": 53
+    },
+    {
+      "组合": 7,
+      "描述": "大型对称",
+      "units1": 256,
+      "units2": 256,
+      "dropout": 0.2,
+      "learning_rate": 0.001,
+      "valid_return": 0.011456000000000204,
+      "r2_score": 0.8389757495236245,
+      "rmse": 6.8449272723920975,
+      "epochs_trained": 53
+    },
+    {
+      "组合": 8,
+      "描述": "小型低学习率",
+      "units1": 64,
+      "units2": 32,
+      "dropout": 0.2,
+      "learning_rate": 0.0005,
+      "valid_return": 0.12168200000000085,
+      "r2_score": 0.7684244322590816,
+      "rmse": 8.208608890919136,
+      "epochs_trained": 60
+    },
+    {
+      "组合": 9,
+      "描述": "对称高Dropout",
+      "units1": 128,
+      "units2": 128,
+      "dropout": 0.4,
+      "learning_rate": 0.0005,
+      "valid_return": -0.10832599999999962,
+      "r2_score": 0.7695070425240623,
+      "rmse": 8.189398887488265,
+      "epochs_trained": 53
+    },
+    {
+      "组合": 10,
+      "描述": "大型标准",
+      "units1": 256,
+      "units2": 128,
+      "dropout": 0.3,
+      "learning_rate": 0.001,
+      "valid_return": 0.07648400000000052,
+      "r2_score": 0.7947402969848862,
+      "rmse": 7.728141104230988,
+      "epochs_trained": 34
+    }
+  ]
+}
