@@ -18,11 +18,17 @@ PRETRAIN_RATIO = 0.7   # 前 70% 用于训练
 
 # 🚀 优化方向一：更新为 Top 9 因子
 FINAL_FEATURE_SET = [
-    'Return_Lag_1', 'Return_Lag_5', 'Return_Lag_2', 
-    'Daily_Return', 'Body_Ratio',
-    # 新增的 MACD 和 RSI 因子
-    'MACD_HIST', 'MACD_DEA', 'MACD_DIF', 'RSI' 
+    'Return_Lag_5',
+    'Return_Lag_1',
+    'Return_Lag_2',
+    'MACD_HIST',
+    'Return_Skew',
+    'Return_Kurt',
+    'OBV',
+    'ATR',
+    'Volume_Ratio'
 ]
+
 FINAL_COLUMNS = FINAL_FEATURE_SET + ['Target', 'Close']
 
 # 输出文件名
@@ -106,6 +112,31 @@ def feature_engineering_final(df):
     # 计算相对强度 RS 和 RSI
     rs = avg_gain / avg_loss
     df['RSI'] = 100 - (100 / (1 + rs))
+
+        # ===== 新增：高阶统计 & 量价 & 波动因子（来自 featureWork 结果） =====
+
+    # 1️⃣ 收益率高阶统计
+    STAT_WINDOW = 30
+    df['Return_Skew'] = df['Daily_Return'].rolling(STAT_WINDOW).skew()
+    df['Return_Kurt'] = df['Daily_Return'].rolling(STAT_WINDOW).kurt()
+
+    # 2️⃣ OBV（能量潮）
+    obv = pd.Series(0, index=df.index)
+    obv[df['Close'] > df['Close'].shift(1)] = df['Volume']
+    obv[df['Close'] < df['Close'].shift(1)] = -df['Volume']
+    df['OBV'] = obv.cumsum()
+
+    # 3️⃣ ATR
+    high_low = df['High'] - df['Low']
+    high_close = (df['High'] - df['Close'].shift()).abs()
+    low_close = (df['Low'] - df['Close'].shift()).abs()
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    df['ATR'] = tr.rolling(14).mean()
+
+    # 4️⃣ Volume Ratio
+    df['Volume_SMA_5'] = df['Volume'].rolling(5).mean()
+    df['Volume_Ratio'] = df['Volume'] / df['Volume_SMA_5']
+
     
     df.dropna(inplace=True)
     return df

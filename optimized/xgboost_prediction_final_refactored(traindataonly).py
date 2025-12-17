@@ -23,16 +23,22 @@ plt.rcParams['font.sans-serif'] = ['SimHei']  # 中文字体
 plt.rcParams['axes.unicode_minus'] = False  # 负号显示
 # 🚀 Top 9 因子
 FINAL_FEATURE_SET = [
-    'Return_Lag_1', 'Return_Lag_5', 'Return_Lag_2', 
-    'Daily_Return', 'Body_Ratio',      
-    'MACD_HIST', 'MACD_DEA', 'MACD_DIF', 'RSI' 
+    'Return_Lag_5',
+    'Return_Lag_1',
+    'Return_Lag_2',
+    'MACD_HIST',
+    'Return_Skew',
+    'Return_Kurt',
+    'OBV',
+    'ATR',
+    'Volume_Ratio'
 ]
 TARGET_COLUMN = 'Target'
 
 # ⚙️ 最终锁定 87.41% 收益的参数半仓逻辑
-CONFIDENCE_THRESHOLD = 0.75   # 阈值在这里失效，但保留为 0.60
+CONFIDENCE_THRESHOLD = 0.0   # 阈值在这里失效，但保留为 0.60
 COOLING_PERIOD_DAYS = 0       # 约束条件
-SELL_WEIGHT = 0.2             # 产生最佳收益的惩罚权重
+SELL_WEIGHT = 0.3             # 产生最佳收益的惩罚权重
 SELL_WEIGHT_CANDIDATES = np.round(np.arange(0.0, 1.01, 0.1), 2)
 
 
@@ -106,17 +112,36 @@ def evaluate_sell_weight(
     df_bt['Predicted_Target'] = pred
     df_bt['Proba_1'] = proba[:, 2]
 
-    df_bt, metrics = backtest_strategy(df_bt, initial_capital)
+    # 仅基于模型预测分布评估（不进入交易系统）
+    pred_series = pd.Series(pred, index=df_train_raw.index)
 
-    # 3️⃣ 综合评分：收益 - 回撤惩罚
-    score = metrics['Total_Strategy_Return'] - 0.5 * metrics['Max_Drawdown']
+    sell_ratio = (pred_series == -1).mean()
+    buy_ratio  = (pred_series == 1).mean()
+
+    # === 新增：方向正确的买 / 错误的买 ===
+    correct_buy = ((pred_series == 1) & (df_train_raw['Target'] == 1)).mean()
+    false_buy   = ((pred_series == 1) & (df_train_raw['Target'] == -1)).mean()
+
+    # === 新 score：奖励买对，强罚买错 ===
+    score = (
+        correct_buy
+        - 1.5 * false_buy
+        - 0.2 * sell_ratio
+    )
+
+
 
     return {
         'sell_weight': sell_weight,
-        'return': metrics['Total_Strategy_Return'],
-        'max_dd': metrics['Max_Drawdown'],
+
+        # 这里只保留“模型层面”的指标
+        'buy_ratio': buy_ratio,
+        'sell_ratio': sell_ratio,
+
+        # 用 score 作为唯一调参目标
         'score': score
     }
+
 
 
 # --- 3. XGBoost 模型训练与预测 (Sell 权重 0.1) ---
@@ -133,7 +158,7 @@ def train_and_predict_xgboost(X_train, Y_train_mapped, X_predicting, Y_train_ori
     
     xgb_model = xgb.XGBClassifier(
         objective='multi:softprob', num_class=3, n_estimators=1000, 
-        learning_rate=0.03, max_depth=4, gamma=0.1, reg_lambda=0.5,            
+        learning_rate=0.03, max_depth=5, gamma=0.05, reg_lambda=0.5,            
         use_label_encoder=False, eval_metric='mlogloss', n_jobs=-1, seed=42
     )
 
@@ -217,7 +242,7 @@ def backtest_strategy(df, initial_capital):
     # 1. 信心阈值过滤买入信号
     df['Filtered_Signal'] = df.apply(
         lambda row: row['Predicted_Target'] 
-                    if row['Predicted_Target'] == -1 or (row['Predicted_Target'] == 1 and row['Proba_1'] > CONFIDENCE_THRESHOLD) 
+                    if row['Predicted_Target'] == 1
                     else 0,
         axis=1
     )
@@ -299,15 +324,32 @@ def plot_results(df_results, metrics):
     plt.plot(df_results.index, df_results['Strategy_Equity'], label='ML 增强策略净值', color='blue', linewidth=2)
     plt.plot(df_results.index, df_results['Benchmark_Equity'], label='买入持有 (基准)', color='red', linestyle='--', linewidth=1)
     
-    buy_signals = df_results[df_results['Action'] == 1].iloc[1:] 
-    sell_signals = df_results[df_results['Action'] == -1].iloc[1:]
+    buy_signals = df_results[df_results['Action'] == 1]
+    sell_signals = df_results[df_results['Action'] == -1]
 
-    ax.scatter(buy_signals.index, buy_signals['Strategy_Equity'], 
-               marker='^', s=100, color='green', label='买入信号', alpha=1)
-    ax.scatter(sell_signals.index, sell_signals['Strategy_Equity'], 
-               marker='v', s=100, color='red', label='卖出信号', alpha=1)
+    ax.scatter(
+        buy_signals.index,
+        buy_signals['Strategy_Equity'],
+        marker='^',
+        s=120,
+        color='green',
+        zorder=5,
+        label='买入'
+    )
+
+    ax.scatter(
+        sell_signals.index,
+        sell_signals['Strategy_Equity'],
+        marker='v',
+        s=120,
+        color='red',
+        zorder=5,
+        label='卖出'
+    )
+
     
-    plt.title(f"投资组合净值曲线 (Sell惩罚 {SELL_WEIGHT}, 冷却期:{COOLING_PERIOD_DAYS}日, 半仓模式)")
+    plt.title(
+    f"投资组合净值曲线 (半仓 + 阈值策略, 冷却期:{COOLING_PERIOD_DAYS}日)")
     plt.xlabel("日期")
     plt.ylabel("净值")
     plt.grid(True, linestyle=':', alpha=0.6)
@@ -355,7 +397,13 @@ if __name__ == "__main__":
         )
 
         results.append(res)
-        print(f"Sell={w:.2f} | 收益={res['return']:.2%} | 回撤={res['max_dd']:.2%}")
+        print(
+        f"Sell={w:.2f} | "
+        f"BuyRatio={res['buy_ratio']:.2%} | "
+        f"SellRatio={res['sell_ratio']:.2%} | "
+        f"Score={res['score']:.4f}"
+    )
+
 
     best = max(results, key=lambda x: x['score'])
     SELL_WEIGHT = best['sell_weight']
