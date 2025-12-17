@@ -70,18 +70,26 @@ def load_and_preprocess_raw_data(file_name):
 def feature_engineering(df):
     """计算所有特征指标 (X) 和构建标签 (Y)。"""
     
-    # --- A. 基础清洗与标签构建 (Y) ---
-    df.fillna(method='ffill', inplace=True)
-    df = df[df['Volume'] > 0] # 移除成交量为零的交易日
-    
-    # 1. 构建标签 Y
-    df['Next_Day_Close'] = df['Close'].shift(-1)
-    df['Next_Day_Return'] = (df['Next_Day_Close'] / df['Close']) - 1
-    df['Target'] = 0  # 默认设置为 0 (平)
-    df.loc[df['Next_Day_Return'] > CLASSIFICATION_THRESHOLD, 'Target'] = 1
-    df.loc[df['Next_Day_Return'] < -CLASSIFICATION_THRESHOLD, 'Target'] = -1
-    
-    print(f"\n标签 Target (Y) 构建完成。三分类标签比例：{Counter(df['Target'].dropna())}")
+    # ==================================================
+    # 1️⃣ 收益感知标签（替换原 Next_Day_Return 逻辑）
+    # ==================================================
+    FUTURE_WINDOW = 5          # 未来 5 日
+    UP_THRESHOLD = 0.03        # +3%
+    DOWN_THRESHOLD = -0.03    # -3%
+
+    df['Future_Close'] = df['Close'].shift(-FUTURE_WINDOW)
+    df['Future_Return'] = (df['Future_Close'] / df['Close']) - 1
+
+    df['Target'] = 0
+    df.loc[df['Future_Return'] > UP_THRESHOLD, 'Target'] = 1
+    df.loc[df['Future_Return'] < DOWN_THRESHOLD, 'Target'] = -1
+
+    print(
+        f"\n收益感知标签 Target 构建完成 "
+        f"(未来{FUTURE_WINDOW}日, ±{UP_THRESHOLD:.0%})，"
+        f"标签分布：{Counter(df['Target'].dropna())}"
+    )
+
     
     # 2. 计算日收益率和基础波动率指标 (用于后续因子计算)
     df['Daily_Return'] = df['Close'].pct_change() 
@@ -173,10 +181,18 @@ def feature_engineering(df):
     df.dropna(inplace=True)
 
     # 定义特征和标签列
-    EXCLUDED_COLS = ['Next_Day_Close', 'Next_Day_Return', 'Target', 'TR', 'High_PrevClose', 'Low_PrevClose', 'Body_Length', 'Upper_Wick', 'Volume_SMA_5', 'StdDev']
-    FEATURE_COLUMNS = [col for col in df.columns if col not in EXCLUDED_COLS]
+    EXCLUDED_COLS = [
+        'Next_Day_Close', 'Next_Day_Return',
+        'Future_Close', 'Future_Return',   # ←【只新增这两个】
+        'Target',
+        'TR', 'High_PrevClose', 'Low_PrevClose',
+        'Body_Length', 'Upper_Wick',
+        'Volume_SMA_5', 'StdDev'
+    ]
+    # ===== 新增：显式定义特征列与标签列（修复 NameError）=====
     LABEL_COLUMN = 'Target'
-    
+    FEATURE_COLUMNS = [col for col in df.columns if col not in EXCLUDED_COLS]
+
     X = df[FEATURE_COLUMNS]
     Y = df[LABEL_COLUMN]
 

@@ -23,16 +23,24 @@ plt.rcParams['font.sans-serif'] = ['SimHei']  # 中文字体
 plt.rcParams['axes.unicode_minus'] = False  # 负号显示
 # 🚀 Top 9 因子
 FINAL_FEATURE_SET = [
-    'Return_Lag_1', 'Return_Lag_5', 'Return_Lag_2', 
-    'Daily_Return', 'Body_Ratio',      
-    'MACD_HIST', 'MACD_DEA', 'MACD_DIF', 'RSI' 
+    'Return_Lag_5',
+    'Return_Lag_1',
+    'Return_Lag_2',
+    'MACD_HIST',
+    'Return_Skew',
+    'Return_Kurt',
+    'OBV',
+    'ATR',
+    'Volume_Ratio'
 ]
 TARGET_COLUMN = 'Target'
 
 # ⚙️ 最终锁定 87.41% 收益的参数半仓逻辑
-CONFIDENCE_THRESHOLD = 0.75   # 阈值在这里失效，但保留为 0.60
-COOLING_PERIOD_DAYS = 2       # 约束条件
-SELL_WEIGHT = 0.2             # 产生最佳收益的惩罚权重
+CONFIDENCE_THRESHOLD = 0.0   # 阈值在这里失效，但保留为 0.60
+COOLING_PERIOD_DAYS = 0       # 约束条件
+SELL_WEIGHT = 0.3             # 产生最佳收益的惩罚权重
+SELL_WEIGHT_CANDIDATES = np.round(np.arange(0.0, 1.01, 0.1), 2)
+
 
 # --- 2. 数据加载和预处理 (保持不变) ---
 def load_and_prepare_data():
@@ -56,6 +64,85 @@ def load_and_prepare_data():
     print("-" * 50)
     return X_train, Y_train_mapped, X_predicting, Y_train, df_predicting 
 
+def evaluate_sell_weight(
+    sell_weight,
+    X_train,
+    Y_train_mapped,
+    Y_train_original,
+    df_train_raw,
+    initial_capital=100000
+):
+    global SELL_WEIGHT
+    SELL_WEIGHT = sell_weight
+
+    # 1️⃣ 训练模型并预测训练集
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_train)
+
+    weight_map = {0: SELL_WEIGHT, 1: 1.0, 2: 3.0}
+    sample_weights = Y_train_mapped.map(weight_map)
+
+    model = xgb.XGBClassifier(
+        objective='multi:softprob',
+        num_class=3,
+        n_estimators=500,
+        learning_rate=0.05,
+        max_depth=4,
+        eval_metric='mlogloss',
+        n_jobs=-1,
+        seed=42
+    )
+    model.fit(X_scaled, Y_train_mapped, sample_weight=sample_weights)
+
+    X_valid = df_train_raw[FINAL_FEATURE_SET]
+
+    # === 用 pretrain 训练好的模型，预测 valid ===
+    X_valid_scaled = scaler.transform(X_valid)
+    proba = model.predict_proba(X_valid_scaled)
+
+    pred_mapped = np.argmax(proba, axis=1)
+    pred = (
+        pd.Series(pred_mapped, index=df_train_raw.index)
+        .replace({0: -1, 1: 0, 2: 1})
+    )
+
+
+    # 2️⃣ 用“训练集”做一次完整回测
+    df_bt = df_train_raw.copy()
+    df_bt['Predicted_Target'] = pred
+    df_bt['Proba_1'] = proba[:, 2]
+
+    # 仅基于模型预测分布评估（不进入交易系统）
+    pred_series = pd.Series(pred, index=df_train_raw.index)
+
+    sell_ratio = (pred_series == -1).mean()
+    buy_ratio  = (pred_series == 1).mean()
+
+    # === 新增：方向正确的买 / 错误的买 ===
+    correct_buy = ((pred_series == 1) & (df_train_raw['Target'] == 1)).mean()
+    false_buy   = ((pred_series == 1) & (df_train_raw['Target'] == -1)).mean()
+
+    # === 新 score：奖励买对，强罚买错 ===
+    score = (
+        correct_buy
+        - 1.5 * false_buy
+        - 0.2 * sell_ratio
+    )
+
+
+
+    return {
+        'sell_weight': sell_weight,
+
+        # 这里只保留“模型层面”的指标
+        'buy_ratio': buy_ratio,
+        'sell_ratio': sell_ratio,
+
+        # 用 score 作为唯一调参目标
+        'score': score
+    }
+
+
 
 # --- 3. XGBoost 模型训练与预测 (Sell 权重 0.1) ---
 
@@ -71,7 +158,7 @@ def train_and_predict_xgboost(X_train, Y_train_mapped, X_predicting, Y_train_ori
     
     xgb_model = xgb.XGBClassifier(
         objective='multi:softprob', num_class=3, n_estimators=1000, 
-        learning_rate=0.03, max_depth=4, gamma=0.1, reg_lambda=0.5,            
+        learning_rate=0.03, max_depth=5, gamma=0.05, reg_lambda=0.5,            
         use_label_encoder=False, eval_metric='mlogloss', n_jobs=-1, seed=42
     )
 
@@ -155,7 +242,7 @@ def backtest_strategy(df, initial_capital):
     # 1. 信心阈值过滤买入信号
     df['Filtered_Signal'] = df.apply(
         lambda row: row['Predicted_Target'] 
-                    if row['Predicted_Target'] == -1 or (row['Predicted_Target'] == 1 and row['Proba_1'] > CONFIDENCE_THRESHOLD) 
+                    if row['Predicted_Target'] == 1
                     else 0,
         axis=1
     )
@@ -237,15 +324,32 @@ def plot_results(df_results, metrics):
     plt.plot(df_results.index, df_results['Strategy_Equity'], label='ML 增强策略净值', color='blue', linewidth=2)
     plt.plot(df_results.index, df_results['Benchmark_Equity'], label='买入持有 (基准)', color='red', linestyle='--', linewidth=1)
     
-    buy_signals = df_results[df_results['Action'] == 1].iloc[1:] 
-    sell_signals = df_results[df_results['Action'] == -1].iloc[1:]
+    buy_signals = df_results[df_results['Action'] == 1]
+    sell_signals = df_results[df_results['Action'] == -1]
 
-    ax.scatter(buy_signals.index, buy_signals['Strategy_Equity'], 
-               marker='^', s=100, color='green', label='买入信号', alpha=1)
-    ax.scatter(sell_signals.index, sell_signals['Strategy_Equity'], 
-               marker='v', s=100, color='red', label='卖出信号', alpha=1)
+    ax.scatter(
+        buy_signals.index,
+        buy_signals['Strategy_Equity'],
+        marker='^',
+        s=120,
+        color='green',
+        zorder=5,
+        label='买入'
+    )
+
+    ax.scatter(
+        sell_signals.index,
+        sell_signals['Strategy_Equity'],
+        marker='v',
+        s=120,
+        color='red',
+        zorder=5,
+        label='卖出'
+    )
+
     
-    plt.title(f"投资组合净值曲线 (Sell惩罚 {SELL_WEIGHT}, 冷却期:{COOLING_PERIOD_DAYS}日, 半仓模式)")
+    plt.title(
+    f"投资组合净值曲线 (半仓 + 阈值策略, 冷却期:{COOLING_PERIOD_DAYS}日)")
     plt.xlabel("日期")
     plt.ylabel("净值")
     plt.grid(True, linestyle=':', alpha=0.6)
@@ -256,7 +360,56 @@ def plot_results(df_results, metrics):
 # --- 6. 主程序运行 ---
 
 if __name__ == "__main__":
+    print("🔍 开始基于【收益 + 回撤】选择 Sell 权重...")
+    results = []
+
+    # ① 先加载数据
+    X_train, Y_train_mapped, X_predicting, Y_train_original, df_predicting_raw = load_and_prepare_data()
+
+    # ② 用训练集原始数据做回测
+    df_train_raw = df_predicting_raw.loc[df_predicting_raw.index <= X_train.index.max()].copy()
+    # ===== 新增：时间切分（不删原 df_train_raw）=====
+    # ===== 按时间顺序比例切分（防止数据为空）=====
+    split_point = int(len(df_train_raw) * 0.7)
+
+    df_pretrain = pd.read_csv("00700_pretrain_data.csv", index_col='Date', parse_dates=True)
+    df_valid    = pd.read_csv("00700_valid_data.csv", index_col='Date', parse_dates=True)
+
+
+    # ===== 防御：避免预训练集为空 =====
+    if len(df_pretrain) == 0:
+        raise ValueError(
+            "❌ df_pretrain 为空，请检查 TRAIN 数据起始日期，"
+            "建议将切分点改为如 '2021-01-01'"
+        )
+
+
+    print("🔍 开始基于【收益 + 回撤】选择 Sell 权重...")
+    results = []
     
+    for w in SELL_WEIGHT_CANDIDATES:
+        res = evaluate_sell_weight(
+            w,
+            X_train.loc[df_pretrain.index],
+            Y_train_mapped.loc[df_pretrain.index],
+            Y_train_original.loc[df_pretrain.index],
+            df_valid              # ←【关键：回测用验证集】
+        )
+
+        results.append(res)
+        print(
+        f"Sell={w:.2f} | "
+        f"BuyRatio={res['buy_ratio']:.2%} | "
+        f"SellRatio={res['sell_ratio']:.2%} | "
+        f"Score={res['score']:.4f}"
+    )
+
+
+    best = max(results, key=lambda x: x['score'])
+    SELL_WEIGHT = best['sell_weight']
+
+    print(f"\n✅ 最优 Sell 权重: {SELL_WEIGHT} (Score={best['score']:.4f})")
+
     X_train, Y_train_mapped, X_predicting, Y_train_original, df_predicting_raw = load_and_prepare_data()
     
     if X_train is not None:
@@ -305,4 +458,16 @@ if __name__ == "__main__":
         # 6. 可视化结果
         plot_results(df_results, metrics)
         
+        # ===============================
+        # 📊 交易一致性指标（只在有交易时）
+        # ===============================
+        df_trade = df_results[df_results['Action'] != 0].copy()
+
+        if 'Target' in df_trade.columns and len(df_trade) > 0:
+            trade_direction_acc = (
+                np.sign(df_trade['Action']) ==
+                np.sign(df_trade['Target'])
+            ).mean()
+
+            print(f"📈 交易方向一致率: {trade_direction_acc:.2%}")
         print(f"🎉 评估完成！")
