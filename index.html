@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>量化策略研究可视化结果展示</title>
+    <style>
+        /* 基础样式优化 */
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; margin: 0; background-color: #f0f2f5; color: #333; line-height: 1.8; }
+        
+        /* 导航栏样式 */
+        nav { background-color: #1a2a3a; position: sticky; top: 0; z-index: 1000; display: flex; justify-content: center; padding: 12px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        nav a { color: #ecf0f1; text-decoration: none; padding: 10px 25px; margin: 0 5px; border-radius: 4px; transition: 0.3s; font-weight: 500; }
+        nav a:hover { background-color: #3498db; color: white; }
+
+        /* 内容布局 */
+        .container { max-width: 1100px; margin: 40px auto; padding: 30px; background: white; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border-radius: 12px; }
+        section { display: none; padding: 10px; animation: fadeIn 0.5s ease; }
+        section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; font-weight: 600; }
+        h2 { color: #2c3e50; border-left: 6px solid #3498db; padding-left: 15px; margin-top: 30px; font-size: 1.5em; }
+        h3 { color: #34495e; margin-top: 25px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+
+        /* 图片与描述框 */
+        .image-box { text-align: center; margin: 25px 0; }
+        img { max-width: 100%; height: auto; border: 1px solid #eee; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .description { background: #f8fbff; padding: 20px; border-radius: 8px; border-left: 4px solid #3498db; margin: 20px 0; text-align: left; }
+        .description strong { color: #2980b9; }
+
+        /* 表格样式 */
+        .result-table { width: 100%; border-collapse: collapse; margin: 25px 0; font-size: 1em; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .result-table th { background-color: #3498db; color: white; padding: 15px; }
+        .result-table td { padding: 12px; border: 1px solid #edf2f7; }
+        .result-table tr:nth-child(even) { background-color: #f9fbfd; }
+        .table-caption { text-align: center; font-weight: bold; margin-bottom: 10px; color: #555; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a href="javascript:void(0)" onclick="showTab('tab1')">特征工程</a>
+    <a href="javascript:void(0)" onclick="showTab('tab2')">模型表现</a>
+    <a href="javascript:void(0)" onclick="showTab('tab3')">策略评估</a>
+    <a href="javascript:void(0)" onclick="showTab('tab4')">交易结果</a>
+    <a href="javascript:void(0)" onclick="showTab('tab5')">预测效果</a>
+</nav>
+
+<div class="container">
+    <h1>量化交易策略研究分析报告</h1>
+
+    <section id="tab1" class="active">
+        <h2>特征工程相关性分析</h2>
+        <div class="image-box">
+            <img src="相关性分析.png" alt="特征相关性热力图">
+            <div class="description">
+                <strong>分析结论：</strong> 此图展示了不同特征之间的相关性。通过热力图可以观察到自变量与目标变量之间的线性关系强度。我们重点筛选了与目标收益率相关性较高且互补性强的指标，为后续 LSTM 模型的非线性建模提供了高质量的特征输入，有效降低了冗余噪声对预测的影响。
+            </div>
+        </div>
+    </section>
+
+    <section id="tab2">
+        <h2>模型表现选择</h2>
+        <div class="image-box">
+            <img src="模型评估.jpg" alt="模型评估对比图">
+            <div class="description">
+                <strong>模型筛选逻辑：</strong> 针对 LSTM 模型本身的预测逻辑，我们设计了多组对比实验。实验发现“纯预测方向”与“原始回归值”在缺乏过滤机制下极易受噪声干扰。通过对比不同参数下的 MSE、MAE 等指标，我们最终选定了一组在测试集上拟合度最高且具备良好泛化能力的模型权重，作为策略的核心预测引擎。
+            </div>
+        </div>
+    </section>
+
+    <section id="tab3">
+        <h2>策略消融实验与评估</h2>
+        <div class="image-box">
+            <img src="策略评估.png" alt="策略回测图1">
+            <img src="策略评估 (2).png" alt="策略回测图2">
+            <div class="description">
+                <strong>核心发现：</strong> 实验显示 <strong>LSTM + MA5 + MACD 复合策略以 120.91% 的累计收益率位居榜首</strong>。
+                <br><br>
+                1. <strong>增量价值：</strong> 相比均线策略（94.17%），核心策略获得了 26.74% 的超额增量收益，证明了 AI 对价格拐点的预判能力。<br>
+                2. <strong>单源信号局限：</strong> 纯 LSTM 策略（30.66%）因缺乏过滤导致频繁无效交易；而严格 AND 策略则因过度约束导致失灵。这验证了“多维决策空间”中“预测+确认+过滤”闭环逻辑的必要性。
+            </div>
+        </div>
+    </section>
+
+    <section id="tab4">
+        <h2>交易结果分析</h2>
+        
+        <div class="table-caption">Table 2 Summary of Backtesting Results</div>
+        <table class="result-table">
+            <thead>
+                <tr>
+                    <th>评价指标 (Indicator)</th>
+                    <th>数值 (Value)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>初始资金 (Initial Capital)</td>
+                    <td>100,000.00</td>
+                </tr>
+                <tr>
+                    <td>最终资金 (Final Capital)</td>
+                    <td>220,905.40</td>
+                </tr>
+                <tr>
+                    <td><strong>总收益率 (Total Return)</strong></td>
+                    <td style="color: #e74c3c; font-weight: bold;">120.91%</td>
+                </tr>
+                <tr>
+                    <td><strong>最大回撤 (Max Drawdown)</strong></td>
+                    <td style="color: #27ae60; font-weight: bold;">-8.27%</td>
+                </tr>
+                <tr>
+                    <td>交易次数 (Trade Count)</td>
+                    <td>223</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="image-box">
+            <h3>策略净值与买入持有基准对比</h3>
+            <img src="交易结果 (2).png" alt="净值曲线">
+            <p style="text-align: left;">混合策略净值显著高于基准曲线，特别是在波动阶段有效规避了回撤，实现了持续超额收益。</p>
+
+            <h3>策略回撤曲线</h3>
+            <img src="交易结果 (3).png" alt="回撤曲线">
+            <p style="text-align: left;">最大回撤控制在 -8.27% 左右。在市场调整期，策略通过清仓或降频有效抑制了深度损失，风控作用显著。</p>
+
+            <h3>交易时点示意图</h3>
+            <img src="交易结果 (1).png" alt="买卖点分布">
+            <p style="text-align: left;">交易信号集中在趋势拐点或加速阶段，买卖点分布密集但合理，未出现追涨杀跌，实现了灵敏度与容错性的平衡。</p>
+        </div>
+    </section>
+
+    <section id="tab5">
+        <h2>实际股价与 LSTM 预测结果对比</h2>
+        <div class="image-box">
+            <img src="预测效果.png" alt="预测结果拟合图">
+            <div class="description">
+                <strong>预测效能分析：</strong> 预测曲线在整体趋势和中短期波动上均能够较好地跟随真实价格变化。虽然在局部极值点存在一定滞后，但整体误差水平处于可接受范围。这证明了 LSTM 能够捕捉金融时间序列中的非线性规律，为“预测数值”向“交易价值”的跨越提供了坚实的数据基础。
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+    function showTab(tabId) {
+        // 隐藏所有 section
+        const sections = document.querySelectorAll('section');
+        sections.forEach(sec => sec.classList.remove('active'));
+        
+        // 显示点击的 section
+        document.getElementById(tabId).classList.add('active');
+        
+        // 平滑滚动到页面顶部
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+</script>
+
+</body>
+</html>
